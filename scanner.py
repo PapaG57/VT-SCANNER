@@ -1,3 +1,15 @@
+"""
+================================================================================
+PROJET : VT-SCANNER
+AUTEUR : FG Developpement & Gemini (IA)
+SITE WEB : https://www.fgdeveloppement.com
+DATE : 27 Mai 2026
+VERSION : 1.0.0
+DESCRIPTION : Surveillance automatique du dossier Téléchargements avec analyse
+              VirusTotal et mise en quarantaine des menaces.
+================================================================================
+"""
+
 import os
 import time
 import hashlib
