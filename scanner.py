@@ -3,6 +3,7 @@ import time
 import hashlib
 import requests
 import threading
+import webbrowser
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from dotenv import load_dotenv
@@ -14,6 +15,7 @@ from PIL import Image, ImageDraw
 VERSION = "1.0.0"
 AUTHOR = "FG Developpement"
 PROJECT_NAME = "VT-SCANNER"
+WEBSITE_URL = "https://www.fgdeveloppement.com"
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -92,10 +94,14 @@ def on_exit(icon, item):
     icon.stop()
     os._exit(0)
 
+def open_website(icon, item):
+    webbrowser.open(WEBSITE_URL)
+
 def run_tray():
     menu = Menu(
         MenuItem(f"{PROJECT_NAME} v{VERSION}", None, enabled=False),
         MenuItem(f"Par {AUTHOR}", None, enabled=False),
+        MenuItem("Site Web", open_website),
         MenuItem("---", None, enabled=False),
         MenuItem("Quitter", on_exit)
     )
