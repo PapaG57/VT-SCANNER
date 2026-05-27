@@ -22,7 +22,7 @@ import socket
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from dotenv import load_dotenv
-from win10toast import ToastNotifier
+from plyer import notification
 from pystray import Icon, Menu, MenuItem
 from PIL import Image, ImageDraw
 
@@ -46,7 +46,18 @@ checked_ips = {}
 if not os.path.exists(QUARANTINE_DIR):
     os.makedirs(QUARANTINE_DIR)
 
-toaster = ToastNotifier()
+# Remplacer toaster par notification
+def notify(title, message):
+    try:
+        notification.notify(
+            title=title,
+            message=message,
+            app_name=PROJECT_NAME,
+            app_icon="tray_icon.png" if os.path.exists("tray_icon.png") else None,
+            timeout=5
+        )
+    except Exception as e:
+        print(f"Erreur notification : {e}")
 
 def get_file_hash(file_path):
     sha256_hash = hashlib.sha256()
@@ -74,9 +85,6 @@ def check_virustotal(resource, resource_type="file"):
     except Exception as e:
         print(f"Erreur connexion API: {e}")
         return None
-
-def notify(title, message):
-    toaster.show_toast(title, message, duration=5, icon_path=None, threaded=True)
 
 def scan_file(file_path):
     """Effectue un scan manuel d'un fichier."""
@@ -188,18 +196,23 @@ class DownloadHandler(FileSystemEventHandler):
 
 
 # --- SYSTEM TRAY ICON ---
-def create_image():
-    # Créer une icône simple (Bouclier bleu/vert)
-    width = 64
-    height = 64
-    image = Image.new('RGB', (width, height), (30, 30, 30))
-    dc = ImageDraw.Draw(image)
-    dc.rectangle([10, 10, 54, 54], fill=(0, 120, 215)) # Bleu Windows
-    dc.text((15, 20), "VT", fill=(255, 255, 255))
-    return image
+def get_icon_image():
+    """Charge le logo personnalisé pour le systray."""
+    try:
+        # Essayer de charger le logo que nous avons copié
+        return Image.open("tray_icon.png")
+    except Exception as e:
+        print(f"Erreur chargement icone : {e}")
+        # Repli sur une icône générée si le fichier est absent
+        width, height = 64, 64
+        image = Image.new('RGB', (width, height), (30, 30, 30))
+        dc = ImageDraw.Draw(image)
+        dc.rectangle([10, 10, 54, 54], fill=(0, 120, 215))
+        return image
 
 def on_exit(icon, item):
     icon.stop()
+    # Forcer l'arrêt pour fermer tous les threads
     os._exit(0)
 
 def open_website(icon, item):
@@ -213,36 +226,37 @@ def run_tray():
         MenuItem("---", None, enabled=False),
         MenuItem("Quitter", on_exit)
     )
-    icon = Icon("VT-Scanner", create_image(), f"{PROJECT_NAME} - Actif", menu)
+    icon = Icon("VT-Scanner", get_icon_image(), f"{PROJECT_NAME} - Actif", menu)
     icon.run()
 
 # --- MAIN ---
 if __name__ == "__main__":
+    print("Vérification de la clé API...")
     if not API_KEY or API_KEY == "votre_cle_api_ici":
         notify("Erreur VT-SCANNER", "Veuillez configurer votre clé API dans le fichier .env")
         sys.exit(1)
 
-    # Vérifier si on scanne un fichier unique (via clic droit)
-    if len(sys.argv) > 1:
-        file_to_scan = sys.argv[1]
-        scan_file(file_to_scan)
-        # Attendre un peu que la notification s'affiche avant de fermer
-        time.sleep(6)
-    else:
-        # 1. Lancer le watcher de fichiers
-        event_handler = DownloadHandler()
-        observer = Observer()
-        observer.schedule(event_handler, WATCH_DIR, recursive=False)
-        observer.start()
+    print(f"Initialisation de {PROJECT_NAME} v{VERSION}...")
+    
+    # 1. Lancer le watcher de fichiers
+    print("Lancement du moniteur de fichiers...")
+    event_handler = DownloadHandler()
+    observer = Observer()
+    observer.schedule(event_handler, WATCH_DIR, recursive=False)
+    observer.start()
 
-        # 2. Lancer le monitoring réseau dans un thread séparé
-        net_thread = threading.Thread(target=monitor_network, daemon=True)
-        net_thread.start()
+    # 2. Lancer le monitoring réseau dans un thread séparé
+    print("Lancement du thread réseau...")
+    net_thread = threading.Thread(target=monitor_network, daemon=True)
+    net_thread.start()
 
-        print(f"Démarrage de {PROJECT_NAME} v{VERSION}")
-        
+    print(f"Démarrage de l'icône systray...")
+    try:
         # 3. Lancer l'icône de la barre des tâches (bloquant)
         run_tray()
-        
+    except Exception as e:
+        print(f"ERREUR FATALE Systray : {e}")
+    finally:
+        print("Arrêt des services...")
         observer.stop()
         observer.join()
