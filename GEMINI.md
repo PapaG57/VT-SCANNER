@@ -3,36 +3,35 @@
 Ce fichier contient les directives, l'architecture et les conventions pour le projet VT-SCANNER.
 
 ## 📌 Vue d'ensemble
-VT-SCANNER est un outil de sécurité local qui surveille les téléchargements, analyse les fichiers via l'API VirusTotal et place les menaces en quarantaine.
+VT-SCANNER est une suite de sécurité artisanale "Maison" qui utilise l'API VirusTotal pour protéger la machine contre les fichiers, liens et connexions malveillants.
 
 ## 🏗️ Architecture
-- **Surveillance** : Utilisation de `watchdog` pour surveiller les modifications du système de fichiers en temps réel.
-- **Analyse** : Hachage SHA-256 local suivi d'une requête API VirusTotal v3.
-- **Interface** : 
-  - Icône dans la zone de notification (systray) via `pystray`.
-  - **Menu Contextuel Windows** : Intégration via le registre pour scanner manuellement via un clic droit.
-- **Notifications** : Alertes natives Windows via `win10toast`.
-- **Configuration** : Variables d'environnement gérées par `python-dotenv`.
+Le projet repose sur quatre piliers de protection :
+
+1.  **Surveillance Fichiers (Temps Réel)** : Utilisation de `watchdog` pour surveiller le dossier de téléchargements. Tout nouveau fichier est haché (SHA-256) et vérifié.
+2.  **Scan Manuel (Menu Contextuel)** : Intégration Windows via le registre pour scanner n'importe quel fichier via un clic droit.
+3.  **Extension Navigateur (Lien)** : Extension Chrome/Edge permettant d'analyser un lien avant de cliquer (clic droit sur un lien).
+4.  **Surveillance Réseau (EDR)** : Analyse en tâche de fond des connexions IP établies via `psutil`.
+
+## 🛠️ Composants du Projet
+- **`scanner.py`** : Cœur du système (Fichiers + Réseau + Systray).
+- **`extension/`** : Code source de l'extension de navigateur.
+- **`install_startup.ps1`** : Configuration du lancement automatique.
+- **`install_context_menu.bat`** : Installation ultra-rapide du menu contextuel Windows.
 
 ## 📜 Conventions & Style
-- **Langue** : Les commentaires dans le code et la documentation sont principalement en **Français**.
-- **Style de Code** : Suivre les recommandations PEP 8 pour Python.
-- **Nommage** :
-  - Fonctions et variables : `snake_case`.
-  - Classes : `PascalCase`.
-  - Constantes : `UPPER_SNAKE_CASE`.
-- **Texte & Typographie** : Pour tout contenu textuel destiné à être affiché ou publié, le texte doit être **justifié** (`text-align: justify`) avec **césure automatique** (`hyphens: auto`) pour garantir un rendu professionnel.
+- **Langue** : Commentaires et documentation en **Français**.
+- **Typographie** : Tout texte affiché doit être **justifié** (`text-align: justify`) avec **césure automatique** (`hyphens: auto`) pour un rendu professionnel.
+- **Code** : Respect strict de PEP 8, utilisation de threads pour ne pas bloquer l'interface (systray).
 
-## 🔐 Sécurité
-- Le fichier `.env` contenant la clé API VirusTotal ne doit **JAMAIS** être commité sur le dépôt.
-- Les fichiers suspects sont déplacés dans un dossier de quarantaine (`QUARANTINE_DIR`) pour éviter toute exécution accidentelle.
+## 🔐 Sécurité & Performance
+- **Gestion des Quotas** : Utilisation d'un cache local (`checked_ips`) pour respecter la limite de 4 requêtes/minute de l'API gratuite VT.
+- **Confidentialité** : La clé API est stockée dans `.env` (local) ou `chrome.storage.local` (extension) et ne quitte jamais la machine.
+- **Interactions** : Conçu pour fonctionner en complément de Windows Defender et MalwareBytes sans conflit.
 
-## 🛠️ Workflows
-- **Ajout de Fonctionnalités** : Modifier `scanner.py`. Le script supporte désormais un argument optionnel (chemin du fichier) pour les scans manuels.
-- **Gestion des Dépendances** : Toujours mettre à jour `requirements.txt`.
-- **Installation** :
-  - `install_startup.ps1` : Lancement automatique au démarrage.
-  - `install_context_menu.ps1` : Ajoute l'option "Scanner avec VirusTotal" au clic droit.
+## 📝 Historique
+- **v1.0.0** : Surveillance de base des téléchargements.
+- **v1.1.0** : Ajout du menu contextuel Windows (.bat).
+- **v1.2.0** : Ajout de la surveillance réseau (IP) et de l'extension de navigateur.
 
-## 📝 Historique & Mémoire
-*Note : Ce fichier a été initialisé le 27 Mai 2026 d'après l'état actuel du code source.*
+*Dernière mise à jour : 27 Mai 2026 par Gemini CLI & FG Developpement.*

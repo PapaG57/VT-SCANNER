@@ -17,6 +17,8 @@ import hashlib
 import requests
 import threading
 import webbrowser
+import psutil
+import socket
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from dotenv import load_dotenv
@@ -25,7 +27,7 @@ from pystray import Icon, Menu, MenuItem
 from PIL import Image, ImageDraw
 
 # --- CONFIGURATION & INFOS ---
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 AUTHOR = "FG Developpement"
 PROJECT_NAME = "VT-SCANNER"
 WEBSITE_URL = "https://www.fgdeveloppement.com"
@@ -36,6 +38,9 @@ load_dotenv()
 API_KEY = os.getenv("VT_API_KEY")
 WATCH_DIR = os.path.expanduser(os.getenv("DOWNLOADS_DIR", "~/Downloads"))
 QUARANTINE_DIR = os.path.expanduser(os.getenv("QUARANTINE_DIR", "~/Downloads/Quarantine"))
+
+# Cache pour éviter de scanner plusieurs fois la même IP
+checked_ips = {}
 
 # S'assurer que le dossier de quarantaine existe
 if not os.path.exists(QUARANTINE_DIR):
@@ -50,20 +55,20 @@ def get_file_hash(file_path):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
-def check_virustotal(file_hash):
-    url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
+def check_virustotal(resource, resource_type="file"):
+    """Vérifie un fichier ou une IP sur VirusTotal."""
+    endpoint = "files" if resource_type == "file" else "ip_addresses"
+    url = f"https://www.virustotal.com/api/v3/{endpoint}/{resource}"
     headers = {"x-apikey": API_KEY}
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             return response.json()
         elif response.status_code == 429:
-            print("Quota atteint (4 req/min).")
-            notify("VT-SCANNER : Limite Minute", "Limite de 4 scans par minute atteinte. Le scan reprendra bientôt.")
+            print(f"Quota atteint (4 req/min) pour {resource}.")
             return "RATE_LIMITED"
         elif response.status_code == 403:
             print("Quota journalier/mensuel épuisé.")
-            notify("VT-SCANNER : Quota Épuisé", "Votre quota journalier (500) ou mensuel est atteint. Le scanner reprendra plus tard.")
             return "QUOTA_EXCEEDED"
         return None
     except Exception as e:
@@ -82,9 +87,10 @@ def scan_file(file_path):
 
     try:
         file_hash = get_file_hash(file_path)
-        result = check_virustotal(file_hash)
+        result = check_virustotal(file_hash, "file")
 
         if result == "RATE_LIMITED":
+            notify("VT-SCANNER", "Limite de 4 scans/min atteinte. Réessayez dans un instant.")
             return
         
         if result:
@@ -98,6 +104,58 @@ def scan_file(file_path):
     except Exception as e:
         print(f"Erreur lors du scan : {e}")
 
+def is_private_ip(ip):
+    """Vérifie si une IP est locale (LAN)."""
+    try:
+        ip_parts = list(map(int, ip.split('.')))
+        if ip_parts[0] == 10: return True
+        if ip_parts[0] == 172 and 16 <= ip_parts[1] <= 31: return True
+        if ip_parts[0] == 192 and ip_parts[1] == 168: return True
+        if ip_parts[0] == 127: return True
+        return False
+    except:
+        return True
+
+def monitor_network():
+    """Surveille les connexions réseau actives."""
+    print("Démarrage de la surveillance réseau...")
+    while True:
+        try:
+            for conn in psutil.net_connections(kind='inet'):
+                if conn.status == 'ESTABLISHED' and conn.raddr:
+                    remote_ip = conn.raddr.ip
+                    
+                    # Ignorer les IP locales et celles déjà vérifiées récemment
+                    if is_private_ip(remote_ip) or remote_ip in checked_ips:
+                        continue
+                    
+                    # Vérifier sur VirusTotal
+                    result = check_virustotal(remote_ip, "ip")
+                    
+                    if result == "RATE_LIMITED":
+                        time.sleep(15) # Attendre un peu avant la prochaine IP
+                        continue
+                    
+                    if result and result != "QUOTA_EXCEEDED":
+                        stats = result['data']['attributes']['last_analysis_stats']
+                        malicious = stats.get('malicious', 0)
+                        checked_ips[remote_ip] = malicious
+                        
+                        if malicious > 0:
+                            process_name = "Inconnu"
+                            try:
+                                process_name = psutil.Process(conn.pid).name()
+                            except: pass
+                            notify("⚠️ Connexion Suspecte !", f"IP: {remote_ip}\nProcessus: {process_name}\nAlertes: {malicious}")
+                    else:
+                        checked_ips[remote_ip] = 0 # Marquer comme neutre si inconnu
+                        
+                time.sleep(0.5) # Petite pause entre chaque connexion pour ne pas saturer le CPU
+        except Exception as e:
+            print(f"Erreur monitoring réseau: {e}")
+        
+        time.sleep(60) # Scan complet toutes les minutes
+
 class DownloadHandler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory: return
@@ -110,14 +168,12 @@ class DownloadHandler(FileSystemEventHandler):
 
         try:
             file_hash = get_file_hash(file_path)
-            result = check_virustotal(file_hash)
+            result = check_virustotal(file_hash, "file")
 
             if result == "RATE_LIMITED":
-                # On pourrait ajouter une file d'attente ici, 
-                # mais pour 4/min c'est rare de dépasser.
                 return
 
-            if result:
+            if result and result != "QUOTA_EXCEEDED":
                 malicious = result['data']['attributes']['last_analysis_stats'].get('malicious', 0)
                 if malicious > 0:
                     dest_path = os.path.join(QUARANTINE_DIR, filename)
@@ -125,7 +181,7 @@ class DownloadHandler(FileSystemEventHandler):
                     notify("🛡️ VT-SCANNER : Menace !", f"{filename} déplacé en quarantaine ({malicious} alertes).")
                 else:
                     notify("✅ VT-SCANNER : Sain", f"{filename} a été vérifié avec succès.")
-            else:
+            elif result != "QUOTA_EXCEEDED":
                 notify("❓ VT-SCANNER : Inconnu", f"{filename} n'est pas encore répertorié sur VirusTotal.")
         except Exception as e:
             print(f"Erreur scan : {e}")
@@ -173,15 +229,19 @@ if __name__ == "__main__":
         # Attendre un peu que la notification s'affiche avant de fermer
         time.sleep(6)
     else:
-        # Lancer le watcher dans un thread séparé
+        # 1. Lancer le watcher de fichiers
         event_handler = DownloadHandler()
         observer = Observer()
         observer.schedule(event_handler, WATCH_DIR, recursive=False)
         observer.start()
 
+        # 2. Lancer le monitoring réseau dans un thread séparé
+        net_thread = threading.Thread(target=monitor_network, daemon=True)
+        net_thread.start()
+
         print(f"Démarrage de {PROJECT_NAME} v{VERSION}")
         
-        # Lancer l'icône de la barre des tâches (bloquant)
+        # 3. Lancer l'icône de la barre des tâches (bloquant)
         run_tray()
         
         observer.stop()
