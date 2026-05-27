@@ -11,6 +11,7 @@ DESCRIPTION : Surveillance automatique du dossier Téléchargements avec analyse
 """
 
 import os
+import sys
 import time
 import hashlib
 import requests
@@ -24,7 +25,7 @@ from pystray import Icon, Menu, MenuItem
 from PIL import Image, ImageDraw
 
 # --- CONFIGURATION & INFOS ---
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 AUTHOR = "FG Developpement"
 PROJECT_NAME = "VT-SCANNER"
 WEBSITE_URL = "https://www.fgdeveloppement.com"
@@ -70,7 +71,32 @@ def check_virustotal(file_hash):
         return None
 
 def notify(title, message):
-    toaster.show_toast(title, message, duration=5, threaded=True)
+    toaster.show_toast(title, message, duration=5, icon_path=None, threaded=True)
+
+def scan_file(file_path):
+    """Effectue un scan manuel d'un fichier."""
+    filename = os.path.basename(file_path)
+    if not os.path.exists(file_path):
+        print(f"Erreur : Le fichier {file_path} n'existe pas.")
+        return
+
+    try:
+        file_hash = get_file_hash(file_path)
+        result = check_virustotal(file_hash)
+
+        if result == "RATE_LIMITED":
+            return
+        
+        if result:
+            malicious = result['data']['attributes']['last_analysis_stats'].get('malicious', 0)
+            if malicious > 0:
+                notify("🛡️ VT-SCANNER : Menace !", f"{filename} est suspect ({malicious} alertes).")
+            else:
+                notify("✅ VT-SCANNER : Sain", f"{filename} a été vérifié avec succès.")
+        else:
+            notify("❓ VT-SCANNER : Inconnu", f"{filename} n'est pas encore répertorié sur VirusTotal.")
+    except Exception as e:
+        print(f"Erreur lors du scan : {e}")
 
 class DownloadHandler(FileSystemEventHandler):
     def on_created(self, event):
@@ -138,6 +164,14 @@ def run_tray():
 if __name__ == "__main__":
     if not API_KEY or API_KEY == "votre_cle_api_ici":
         notify("Erreur VT-SCANNER", "Veuillez configurer votre clé API dans le fichier .env")
+        sys.exit(1)
+
+    # Vérifier si on scanne un fichier unique (via clic droit)
+    if len(sys.argv) > 1:
+        file_to_scan = sys.argv[1]
+        scan_file(file_to_scan)
+        # Attendre un peu que la notification s'affiche avant de fermer
+        time.sleep(6)
     else:
         # Lancer le watcher dans un thread séparé
         event_handler = DownloadHandler()
