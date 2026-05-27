@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Configuration VT-Scanner</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; width: 300px; }
+    h2 { font-size: 1.2em; color: #0078d7; }
+    input { width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }
+    button { background: #0078d7; color: white; border: none; padding: 10px; width: 100%; cursor: pointer; }
+    button:hover { background: #005a9e; }
+    .status { margin-top: 10px; font-size: 0.9em; color: green; display: none; }
+  </style>
+</head>
+<body>
+  <h2>Configuration VT</h2>
+  <label for="apiKey">Clé API VirusTotal :</label>
+  <input type="password" id="apiKey" placeholder="Collez votre clé ici...">
+  <button id="save">Enregistrer</button>
+  <div id="status" class="status">Clé enregistrée !</div>
+  <script src="options.js"></script>
+</body>
+</html>

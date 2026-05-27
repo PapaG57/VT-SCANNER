@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "VT-Scanner Link Checker",
+  "version": "1.0",
+  "description": "Analyse les liens avec VirusTotal via le menu contextuel.",
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://www.virustotal.com/api/v3/*"
+  ],
+  "action": {
+    "default_popup": "options.html"
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "128": "icon.png"
+  }
+}
