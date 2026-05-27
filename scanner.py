@@ -56,6 +56,14 @@ def check_virustotal(file_hash):
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             return response.json()
+        elif response.status_code == 429:
+            print("Quota atteint (4 req/min).")
+            notify("VT-SCANNER : Limite Minute", "Limite de 4 scans par minute atteinte. Le scan reprendra bientôt.")
+            return "RATE_LIMITED"
+        elif response.status_code == 403:
+            print("Quota journalier/mensuel épuisé.")
+            notify("VT-SCANNER : Quota Épuisé", "Votre quota journalier (500) ou mensuel est atteint. Le scanner reprendra plus tard.")
+            return "QUOTA_EXCEEDED"
         return None
     except Exception as e:
         print(f"Erreur connexion API: {e}")
@@ -73,11 +81,16 @@ class DownloadHandler(FileSystemEventHandler):
         if filename.endswith((".crdownload", ".tmp", ".part")): return
 
         time.sleep(2) # Attendre la fin de l'écriture
-        
+
         try:
             file_hash = get_file_hash(file_path)
             result = check_virustotal(file_hash)
-            
+
+            if result == "RATE_LIMITED":
+                # On pourrait ajouter une file d'attente ici, 
+                # mais pour 4/min c'est rare de dépasser.
+                return
+
             if result:
                 malicious = result['data']['attributes']['last_analysis_stats'].get('malicious', 0)
                 if malicious > 0:
@@ -90,6 +103,7 @@ class DownloadHandler(FileSystemEventHandler):
                 notify("❓ VT-SCANNER : Inconnu", f"{filename} n'est pas encore répertorié sur VirusTotal.")
         except Exception as e:
             print(f"Erreur scan : {e}")
+
 
 # --- SYSTEM TRAY ICON ---
 def create_image():
