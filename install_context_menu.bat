@@ -11,15 +11,14 @@ echo [VT-SCANNER] Configuration du menu contextuel...
 
 :: Récupération des chemins absolus
 set "BASE_DIR=%~dp0"
-set "PYTHONW=%BASE_DIR%venv\Scripts\pythonw.exe"
-set "SCANNER_PY=%BASE_DIR%scanner.py"
+set "EXE_PATH=%BASE_DIR%dist\VirusTotal Scanner.exe"
 
-:: Vérification de l'existence de l'environnement virtuel
-if not exist "%PYTHONW%" (
+:: Vérification de l'existence de l'exécutable
+if not exist "%EXE_PATH%" (
     echo.
-    echo ERREUR : L'environnement virtuel est introuvable a :
-    echo "%PYTHONW%"
-    echo Veuillez d'abord executer l'installation standard.
+    echo ERREUR : L'executable est introuvable a :
+    echo "%EXE_PATH%"
+    echo Veuillez d'abord compiler le projet.
     pause
     exit /b
 )
@@ -37,12 +36,11 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-:: 2. Ajout de l'icône (utilise l'icône de pythonw.exe)
-reg add "%REG_PATH%" /v "Icon" /t REG_SZ /d "\"%PYTHONW%\"" /f >nul 2>&1
+:: 2. Ajout de l'icône (utilise l'icône de l'exécutable)
+reg add "%REG_PATH%" /v "Icon" /t REG_SZ /d "\"%EXE_PATH%\"" /f >nul 2>&1
 
 :: 3. Configuration de la commande
-:: Note : on utilise double %%1 pour échapper le %1 dans le fichier .bat
-reg add "%REG_PATH%\command" /ve /t REG_SZ /d "\"%PYTHONW%\" \"%SCANNER_PY%\" \"%%1\"" /f >nul 2>&1
+reg add "%REG_PATH%\command" /ve /t REG_SZ /d "\"%EXE_PATH%\" \"%%1\"" /f >nul 2>&1
 
 echo.
 echo SUCCES : L'option a ete ajoutee au menu contextuel !
